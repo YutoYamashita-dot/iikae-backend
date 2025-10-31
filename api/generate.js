@@ -186,7 +186,7 @@ const fallback = {
   }
 };
 
-// --- OpenAI で生成 ---
+// --- OpenAI で生成（→ Grok に接続する実装へ差し替え）---
 // 言語別の system / user テンプレート（なければ英語にフォールバック）
 const SYS = {
   ja: "入力された言葉について、意外性と納得感と少しの風刺を含んだ言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは6〜16字、説明は20〜50字とする。JSONのみ返す。",
@@ -261,26 +261,29 @@ function extractFirstJson(text = "") {
 }
 // ★★★ ここまで ★★★
 
+// ★★★ Grok API に接続する実装（構造はそのまま・関数名も変更しない）★★★
 async function generateWithOpenAI({ topic, lang }) {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  // xAI Grok は OpenAI 互換エンドポイント。openai SDK の baseURL を切り替えて利用。
+  const client = new OpenAI({
+    apiKey: process.env.XAI_API_KEY,                          // ← Grok 用キー
+    baseURL: (process.env.XAI_BASE_URL || "https://api.x.ai/v1") // ← Grok API
+  });
 
-  // ★ 環境変数が空/不正ならデフォルトへ
-  const envModel = (process.env.OPENAI_MODEL || "").trim();
-  const model = envModel || "gpt-5";
+  // 環境変数が空/不正ならデフォルトへ
+  const envModel = (process.env.XAI_MODEL || "").trim();
+  const model = envModel || "grok-4-fast-reasoning"; // 代表的な Grok モデル名
 
   const messages = buildMessages(lang, topic);
 
   try {
     const res = await client.chat.completions.create({
       model,
-      messages,
-      
-  
-      // ※ response_format は外す（非対応モデルでも動く）
+      messages
+      // Grok は chat.completions 互換。temperature/max_tokens は未指定（既定でOK）
     });
 
     const text = res.choices?.[0]?.message?.content ?? "";
-    const parsed = extractFirstJson(text); // ★ 堅牢抽出
+    const parsed = extractFirstJson(text);
     const items = parsed.items;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -291,7 +294,7 @@ async function generateWithOpenAI({ topic, lang }) {
       desc: String(desc ?? "").trim()
     }));
   } catch (e) {
-    console.error("[OpenAI ERROR]", {
+    console.error("[Grok ERROR]", {
       status: e?.status,
       code: e?.code,
       message: e?.message
@@ -299,6 +302,7 @@ async function generateWithOpenAI({ topic, lang }) {
     throw e;
   }
 }
+// ★★★ ここまで ★★★
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -313,9 +317,9 @@ export default async function handler(req, res) {
     const hintOrLang = headerHint || lang;
     const targetLang = decideLang(topic, hintOrLang);
 
-    // ★ APIキー未設定なら明示ログ（運用時の見落とし防止）
-    if (!process.env.OPENAI_API_KEY) {
-      console.warn("[WARN] OPENAI_API_KEY is not set. Falling back.");
+    // ★ Grok 用 API キー必須チェック（他の箇所は変えず、名前だけXAIに）
+    if (!process.env.XAI_API_KEY) {
+      console.warn("[WARN] XAI_API_KEY is not set. Falling back.");
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
@@ -324,13 +328,13 @@ export default async function handler(req, res) {
 
     try {
       const items = await generateWithOpenAI({ topic, lang: targetLang });
-      return res.status(200).json({ items, source: "openai" });
+      return res.status(200).json({ items, source: "grok" });
     } catch (e) {
-      // OpenAI 側失敗時は 200 + fallback（HTTPエラーでフロントを止めない）
+      // Grok 側失敗時は 200 + fallback（HTTPエラーでフロントを止めない）
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
-      return res.status(200).json({ items, source: "fallback_model_error" });
+      return res.status(200).json({ items, source: "fallback_grok_error" });
     }
   } catch (e) {
     console.error("[HANDLER ERROR]", e);
