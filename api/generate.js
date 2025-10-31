@@ -4,7 +4,7 @@
 import OpenAI from "openai";
 
 export const config = {
-  runtime: "nodejs18.x"
+  runtime: "nodejs"
 };
 
 // --- 簡易言語判定（日本語文字を含むかで判定、なければ英語扱い） ---
