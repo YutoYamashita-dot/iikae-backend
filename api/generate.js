@@ -7,6 +7,18 @@ export const config = {
   runtime: "nodejs"
 };
 
+// --- サポート言語（トップ20） ---
+const SUPPORTED = new Set([
+  "auto","en","ja","zh","hi","es","fr","ar","bn","pt","ru","ur","id","de","sw","mr","te","tr","ta","vi","ko"
+]);
+
+// 地域付き → ベースコード正規化
+function normalizeLang(code = "") {
+  const c = String(code).toLowerCase().replace("_","-");
+  const base = c.split("-")[0];
+  return SUPPORTED.has(base) ? base : (SUPPORTED.has(c) ? c : null);
+}
+
 // --- 簡易言語判定（日本語文字を含むかで判定、なければ英語扱い） ---
 function isJapanese(text) {
   if (!text) return false;
@@ -14,117 +26,240 @@ function isJapanese(text) {
 }
 
 function decideLang(topic, lang) {
-  if (!lang || lang === "auto") {
-    return isJapanese(topic) ? "ja" : "en";
-  }
-  return lang.toLowerCase();
+  const n = normalizeLang(lang);
+  if (n && n !== "auto") return n;
+  // auto の場合
+  // 1) 日本語文字なら ja
+  if (isJapanese(topic)) return "ja";
+  // 2) それ以外は英語
+  return "en";
 }
 
 // ★ 追加: Accept-Language ヘッダーからの簡易推定（auto 時のみの補助）
 function pickLangFromHeader(acceptLanguage = "") {
   const v = String(acceptLanguage || "").toLowerCase();
   if (!v) return null;
-  // "ja,ja-JP;q=0.9,en-US;q=0.8,en;q=0.7" のような文字列を想定
-  if (v.includes("ja")) return "ja";
-  if (v.includes("en")) return "en";
+  // 優先度順で探索
+  for (const code of ["ja","en","zh","hi","es","fr","ar","bn","pt","ru","ur","id","de","sw","mr","te","tr","ta","vi","ko"]) {
+    if (v.includes(code)) return code;
+  }
+  // 一致なし
   return null;
 }
 
 // --- フォールバック（テンプレ） ---
+// すべてのサポート言語を用意（簡潔な定型文）
 const fallback = {
   en(topic = "it") {
     return [
-      {
-        title: "Reboot button for humans",
-        desc:
-          `If you don’t press it in the morning, your day freezes. — ${topic} is just playing that role.`
-      },
-      {
-        title: "Emergency exit from boredom",
-        desc:
-          `A device to bail out whenever stuck. In short, ${topic} is another name for “Emergency exit from boredom”.`
-      },
-      {
-        title: "Band-aid for motivation",
-        desc:
-          `Not a cure, but you can move now. That is exactly what people expect from ${topic}.`
-      }
+      { title: "Reboot button for humans", desc: `If you don’t press it in the morning, your day freezes. — ${topic} is just playing that role.` },
+      { title: "Emergency exit from boredom", desc: `A device to bail out whenever stuck. In short, ${topic} is another name for “Emergency exit from boredom”.` },
+      { title: "Band-aid for motivation", desc: `Not a cure, but you can move now. That is exactly what people expect from ${topic}.` }
     ];
   },
   ja(topic = "それ") {
     return [
-      {
-        title: "人間用の再起動ボタン",
-        desc:
-          `朝に押さないと、一日じゅうフリーズする。— ${topic}がその役をやっているだけ。`
-      },
-      {
-        title: "退屈の非常口",
-        desc:
-          `困ったらそこから脱出できる装置。要するに${topic}は「退屈の非常口」の別名。`
-      },
-      {
-        title: "やる気の絆創膏",
-        desc:
-          `根本治療はしないが、今は動けるようにする。${topic}に期待されているのは、だいたいこれ。`
-      }
+      { title: "人間用の再起動ボタン", desc: `朝に押さないと、一日じゅうフリーズする。— ${topic}がその役をやっているだけ。` },
+      { title: "退屈の非常口", desc: `困ったらそこから脱出できる装置。要するに${topic}は「退屈の非常口」の別名。` },
+      { title: "やる気の絆創膏", desc: `根本治療はしないが、今は動けるようにする。${topic}に期待されているのは、だいたいこれ。` }
+    ];
+  },
+  zh(topic = "它") {
+    return [
+      { title: "人类的重启按钮", desc: `早上不按，一天就卡住——${topic}只是在扮演这个角色。` },
+      { title: "无聊的紧急出口", desc: `卡住时的逃生装置。简而言之，${topic}就是“无聊的紧急出口”的别名。` },
+      { title: "动力的创可贴", desc: `不是根治，但能先动起来。人们对${topic}的期待大致如此。` }
+    ];
+  },
+  hi(topic = "यह") {
+    return [
+      { title: "मानवों का रीबूट बटन", desc: `सुबह इसे न दबाओ तो दिन फ्रीज़ हो जाता है — ${topic} बस वही किरदार निभाता है।` },
+      { title: "ऊब का इमरजेंसी एग्ज़िट", desc: `फँसने पर बाहर निकलने का यंत्र। संक्षेप में, ${topic} इसी का दूसरा नाम है।` },
+      { title: "मोटिवेशन की पट्टी", desc: `इलाज नहीं, पर अभी चल पड़ने लायक बनाता है। ${topic} से यही अपेक्षा रहती है।` }
+    ];
+  },
+  es(topic = "eso") {
+    return [
+      { title: "Botón de reinicio humano", desc: `Si no lo pulsas por la mañana, el día se cuelga — ${topic} solo cumple ese papel.` },
+      { title: "Salida de emergencia del aburrimiento", desc: `Un dispositivo para escapar cuando te atascas. En resumen, ${topic} es otro nombre de ello.` },
+      { title: "Tirita de motivación", desc: `No cura, pero te pone en marcha. Eso es lo que se espera de ${topic}.` }
+    ];
+  },
+  fr(topic = "ça") {
+    return [
+      { title: "Bouton de redémarrage humain", desc: `Sans appuyer le matin, la journée se fige — ${topic} ne fait que jouer ce rôle.` },
+      { title: "Issue de secours contre l’ennui", desc: `Un dispositif pour s’échapper quand on bloque. En bref, ${topic} en est l’autre nom.` },
+      { title: "Pansement de motivation", desc: `Pas un remède, mais ça remet en mouvement. C’est ce qu’on attend de ${topic}.` }
+    ];
+  },
+  ar(topic = "ذلك") {
+    return [
+      { title: "زر إعادة تشغيل للبشر", desc: `إن لم تضغطه صباحاً تتجمّد يومك — ${topic} يقوم بهذا الدور فحسب.` },
+      { title: "مخرج طوارئ من الملل", desc: `جهاز للهروب عند التعطّل. باختصار، ${topic} اسم آخر له.` },
+      { title: "ضمادة للدافعية", desc: `ليس علاجاً جذرياً لكنه يجعلك تتحرّك الآن. هذا ما يُتوقّع من ${topic}.` }
+    ];
+  },
+  bn(topic = "ওটা") {
+    return [
+      { title: "মানুষের রিবুট বোতাম", desc: `সকালে না চাপলে দিন হ্যাং হয় — ${topic} শুধু সেই ভূমিকাই করছে।` },
+      { title: "একঘেয়েমির জরুরি বহির্গমন", desc: `আটকে গেলে বেরিয়ে আসার যন্ত্র। সংক্ষেপে, ${topic} এরই আরেক নাম।` },
+      { title: "মোটিভেশনের ব্যান্ড-এড", desc: `আরোগ্য নয়, এখন চলতে সাহায্য করে। ${topic} থেকে এটিই প্রত্যাশা।` }
+    ];
+  },
+  pt(topic = "isso") {
+    return [
+      { title: "Botão de reinício humano", desc: `Se não apertar de manhã, o dia trava — ${topic} só faz esse papel.` },
+      { title: "Saída de emergência do tédio", desc: `Um dispositivo para escapar quando trava. Em resumo, ${topic} é outro nome disso.` },
+      { title: "Curativo de motivação", desc: `Não cura, mas te coloca em movimento. É isso que se espera de ${topic}.` }
+    ];
+  },
+  ru(topic = "это") {
+    return [
+      { title: "Кнопка перезагрузки для людей", desc: `Если утром не нажать — день зависнет. ${topic} лишь играет эту роль.` },
+      { title: "Аварийный выход из скуки", desc: `Устройство для побега, когда застрял. Проще говоря, ${topic} — другое название этого.` },
+      { title: "Пластырь мотивации", desc: `Не лечит, но заставляет двигаться. Этого и ждут от ${topic}.` }
+    ];
+  },
+  ur(topic = "یہ") {
+    return [
+      { title: "انسانوں کا ری بوٹ بٹن", desc: `صبح نہ دباؤ تو دن جم جاتا ہے — ${topic} بس یہی کردار ادا کرتا ہے۔` },
+      { title: "بوریت کا ایمرجنسی ایگزٹ", desc: `اٹکنے پر نکلنے کی ترکیب۔ مختصراً، ${topic} اسی کا دوسرا نام ہے۔` },
+      { title: "حوصلہ افزائی کی پٹی", desc: `علاج نہیں مگر ابھی حرکت دلاتی ہے۔ ${topic} سے یہی توقع ہے۔` }
+    ];
+  },
+  id(topic = "itu") {
+    return [
+      { title: "Tombol reboot manusia", desc: `Kalau pagi tidak ditekan, seharian nge-freeze — ${topic} cuma berperan seperti itu.` },
+      { title: "Pintu darurat dari bosan", desc: `Perangkat untuk kabur saat buntu. Singkatnya, ${topic} adalah nama lain dari itu.` },
+      { title: "Plester motivasi", desc: `Bukan obat tuntas, tapi bikin bergerak sekarang. Itulah yang diharapkan dari ${topic}.` }
+    ];
+  },
+  de(topic = "das") {
+    return [
+      { title: "Neustartknopf für Menschen", desc: `Drückst du ihn morgens nicht, friert der Tag ein — ${topic} erfüllt nur diese Rolle.` },
+      { title: "Notausgang aus der Langeweile", desc: `Ein Gerät zum Aussteigen, wenn man feststeckt. Kurz: ${topic} ist ein anderer Name dafür.` },
+      { title: "Motivations-Pflaster", desc: `Keine Heilung, aber man kommt in Gang. Das erwartet man von ${topic}.` }
+    ];
+  },
+  sw(topic = "hicho") {
+    return [
+      { title: "Kitufe cha kuwasha upya binadamu", desc: `Usipokibonyeza asubuhi, siku inagandia — ${topic} hufanya tu jukumu hilo.` },
+      { title: "Mlango wa dharura kutoka kwenye kuchoka", desc: `Kifaa cha kutoroka unapokwama. Kwa kifupi, ${topic} ni jina lingine la hilo.` },
+      { title: "Plasta ya motisha", desc: `Si tiba, lakini inakuweka uwanjani sasa. Hicho ndicho kinachotarajiwa kutoka kwa ${topic}.` }
+    ];
+  },
+  mr(topic = "ते") {
+    return [
+      { title: "माणसांचा रिबूट बटण", desc: `सकाळी दाबलं नाही तर दिवस हँग होतो — ${topic} फक्त तीच भूमिका बजावतो.` },
+      { title: "कंटाळ्याचा इमर्जन्सी एक्झिट", desc: `अडकले की बाहेर काढणारे साधन. थोडक्यात, ${topic} त्याचं दुसरं नाव.` },
+      { title: "मोटिवेशनची पट्टी", desc: `उपचार नाही, पण आत्ता चालना देते. ${topic} कडून हेच अपेक्षित.` }
+    ];
+  },
+  te(topic = "అది") {
+    return [
+      { title: "మనుషుల రీబూట్ బటన్", desc: `ఉదయం నొక్కకపోతే రోజు ఫ్రీజ్ అవుతుంది — ${topic} ఆ పాత్రనే పోషిస్తుంది.` },
+      { title: "బోర్‌కు ఎమర్జెన్సీ ఎగ్జిట్", desc: `అరుస్తే బయటకు లాగే పరికరం. మొత్తం మీద, ${topic} అదే పేరుకు మరో రూపం.` },
+      { title: "మోటివేషన్ ప్లాస్టర్", desc: `చికిత్స కాదు, ఇప్పుడే కదలిస్తుంది. ${topic} నుండి అదే ఆశిస్తారు.` }
+    ];
+  },
+  tr(topic = "o") {
+    return [
+      { title: "İnsanlar için yeniden başlatma düğmesi", desc: `Sabah basmazsan gün donar — ${topic} sadece bu rolü oynar.` },
+      { title: "Sıkıntıdan acil çıkış", desc: `Sıkışınca kaçış aygıtı. Kısacası, ${topic} bunun başka adıdır.` },
+      { title: "Motivasyon bandı", desc: `Tedavi değil ama harekete geçirir. ${topic}’den beklenen budur.` }
+    ];
+  },
+  ta(topic = "அது") {
+    return [
+      { title: "மனிதருக்கான ரீபூட் பொத்தான்", desc: `காலை அழுத்தாவிட்டால் நாள் உறையும் — ${topic} அந்த வேடம்தான் செய்கிறது.` },
+      { title: "சலிப்பிலிருந்து அவசர வெளியேறு", desc: `சிக்கும்போது தப்பிக்கச் செய்கிறது. சுருக்கமாக, ${topic} அதற்கே இன்னொரு பெயர்.` },
+      { title: "மோட்டிவேஷன் பேண்ட்ஏய்ட்", desc: `சிகிச்சை அல்ல, இப்போது நகர்த்தும். ${topic} மீது இதுவே எதிர்பார்ப்பு.` }
+    ];
+  },
+  vi(topic = "nó") {
+    return [
+      { title: "Nút khởi động lại cho con người", desc: `Sáng không bấm là cả ngày đứng hình — ${topic} chỉ đang đóng vai ấy thôi.` },
+      { title: "Lối thoát khẩn cấp khỏi buồn chán", desc: `Thiết bị để thoát ra khi mắc kẹt. Nói ngắn gọn, ${topic} là tên gọi khác của nó.` },
+      { title: "Băng dán động lực", desc: `Không chữa dứt điểm, nhưng giúp chạy ngay. Người ta mong ở ${topic} điều đó.` }
+    ];
+  },
+  ko(topic = "그것") {
+    return [
+      { title: "사람을 위한 재부팅 버튼", desc: `아침에 누르지 않으면 하루가 얼어붙는다 — ${topic}는 그 역할만 한다.` },
+      { title: "지루함의 비상구", desc: `막힐 때 빠져나오는 장치. 한마디로, ${topic}의 다른 이름이다.` },
+      { title: "동기부여 반창고", desc: `치료는 아니지만 지금 움직이게 한다. ${topic}에 기대하는 바가 그것.` }
     ];
   }
 };
 
 // --- OpenAI で生成 ---
+// 言語別の system / user テンプレート（なければ英語にフォールバック）
+const SYS = {
+  ja: "入力された言葉について、意外性と納得感がある言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは8〜20字、説明は20〜80字で、最後に短い追い文を付けて含意を明確化する。句読点と表記は日本語規範に従う。JSONのみ返す。",
+  en: "You are a concise copywriter. Output must be in the requested language, written style, declarative tone. Return exactly 3 items as JSON objects {title, desc}. Titles are crisp (3–8 words). Descriptions are 25–120 words and end with a short clarifying tail. Return JSON only."
+};
+const USER = {
+  ja: (topic) => `トピック: ${topic}
+要件:
+- 言語: 日本語（厳守）
+- 文体: 書き言葉・断定調（です/ますを避ける）
+- 「${topic}」の性質を比喩・比喩的ラベリングで表現し、タイトルと説明を作る
+- JSON配列のみを返す（余計な文字やマークダウンを含めない）`,
+  en: (topic) => `Topic: ${topic}
+Requirements:
+- Language: the requested target language (strict)
+- Style: written, declarative
+- Express the nature of "${topic}" via metaphors / metaphorical labeling; produce title and description
+- Return JSON array only (no extra text, no markdown)`
+};
+
+// 他言語は system=EN を使い、user 側で「出力言語はXX」と明示する
+function buildMessages(targetLang, topic) {
+  const sys = SYS[targetLang] ?? SYS.en;
+  if (targetLang === "ja") {
+    return [
+      { role: "system", content: sys },
+      { role: "user", content: USER.ja(topic) }
+    ];
+  }
+  const langName = {
+    en:"English", ja:"Japanese", zh:"Chinese", hi:"Hindi", es:"Spanish", fr:"French", ar:"Arabic", bn:"Bengali",
+    pt:"Portuguese", ru:"Russian", ur:"Urdu", id:"Indonesian", de:"German", sw:"Swahili", mr:"Marathi",
+    te:"Telugu", tr:"Turkish", ta:"Tamil", vi:"Vietnamese", ko:"Korean"
+  }[targetLang] || "English";
+
+  const user = `Topic: ${topic}
+Requirements:
+- Output language: ${langName} (STRICT)
+- Style: written, declarative
+- Produce exactly 3 items as JSON array of objects {title, desc}
+- Titles: short and punchy; Descriptions: compact but clear and end with a short clarifying tail
+- Return JSON array only (no extra text, no markdown)`;
+  return [
+    { role: "system", content: SYS.en },
+    { role: "user", content: user }
+  ];
+}
+
 async function generateWithOpenAI({ topic, lang }) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const messages = buildMessages(lang, topic);
 
-  const sys = (l) => {
-    if (l === "ja") {
-      return "入力された言葉について、意外性と納得感がある言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは8〜20字、説明は20〜40字で、最後に短い追い文を付けて含意を明確化する。句読点と表記は日本語規範に従う。";
-    }
-    // default: English
-    return "You are a concise copywriter. Output must be in English, written style, declarative tone. Return exactly 3 items as JSON objects {title, desc}. Titles are crisp (3–8 words). Descriptions are 25–90 words and end with a short clarifying tail that links back to the topic.";
-  };
-
-  const user = (l) => {
-    if (l === "ja") {
-      return `トピック: ${topic}\n
-要件:
-- 言語: 日本語か英語
-- 文体: 書き言葉・断定調（です/ますを避ける）
-- 「${topic}」の性質を比喩で表現し、タイトルと説明を作る
-- JSON配列のみを返す（余計な文字やマークダウンを含めない）`;
-    }
-    return `Topic: ${topic}
-Requirements:
-- Language: English (strict)
-- Style: written, declarative
-- Express the nature of "${topic}" via metaphors; produce title and description
-- Return JSON array only (no extra text, no markdown)`;
-  };
-
-  const messages = [
-    { role: "system", content: sys(lang) },
-    { role: "user", content: user(lang) }
-  ];
-
-  // gpt-4o-mini など軽量モデル（環境変数優先）
   const model = process.env.OPENAI_MODEL || "gpt-5";
 
   const res = await client.chat.completions.create({
     model,
     messages,
     temperature: 0.8,
-    max_tokens: 500,
+    max_tokens: 700,
     response_format: { type: "json_object" } // JSON強制
   });
 
-  // 期待: { "items": [ {title, desc}, ... ] } or [ ... ]
   const text = res.choices?.[0]?.message?.content ?? "";
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch {
-    // モデルがJSONで返していない場合に備えた再解釈
-    // JSON配列のみがきた時も対応
     if (text.trim().startsWith("[")) {
       parsed = { items: JSON.parse(text) };
     } else {
@@ -136,7 +271,6 @@ Requirements:
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw new Error("Empty items");
   }
-  // 3件に揃える（多ければ切る・少なければ落とす）
   return items.slice(0, 3).map(({ title, desc }) => ({
     title: String(title ?? "").trim(),
     desc: String(desc ?? "").trim()
@@ -151,15 +285,16 @@ export default async function handler(req, res) {
   try {
     const { topic = "", lang = "auto" } = (await readJson(req)) ?? {};
 
-    // ★ 追加: lang=auto のときだけ Accept-Language を補助判定に利用
+    // lang=auto のときだけ Accept-Language を補助判定に利用
     const headerHint = lang === "auto" ? pickLangFromHeader(req.headers["accept-language"]) : null;
-    const langHint = headerHint || lang;
-
-    const targetLang = decideLang(topic, langHint);
+    const hintOrLang = headerHint || lang;
+    const targetLang = decideLang(topic, hintOrLang);
 
     if (!process.env.OPENAI_API_KEY) {
-      // フォールバック（言語厳守）
-      const items = (fallback[targetLang] ?? fallback.en)(topic || (targetLang === "ja" ? "それ" : "it"));
+      // フォールバック（対象言語が未定義なら英語へフォールバック）
+      const fb = fallback[targetLang] ?? fallback.en;
+      const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
+      const items = fb(topicFallback);
       return res.status(200).json({ items, source: "fallback" });
     }
 
@@ -167,7 +302,9 @@ export default async function handler(req, res) {
       const items = await generateWithOpenAI({ topic, lang: targetLang });
       return res.status(200).json({ items, source: "openai" });
     } catch (e) {
-      const items = (fallback[targetLang] ?? fallback.en)(topic || (targetLang === "ja" ? "それ" : "it"));
+      const fb = fallback[targetLang] ?? fallback.en;
+      const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
+      const items = fb(topicFallback);
       return res.status(200).json({ items, source: "fallback_model_error" });
     }
   } catch (e) {
@@ -181,11 +318,8 @@ function readJson(req) {
     let data = "";
     req.on("data", (chunk) => (data += chunk));
     req.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch (e) {
-        reject(e);
-      }
+      try { resolve(data ? JSON.parse(data) : {}); }
+      catch (e) { reject(e); }
     });
     req.on("error", reject);
   });
