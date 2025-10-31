@@ -310,14 +310,16 @@ export default async function handler(req, res) {
       const items = await generateWithOpenAI({ topic, lang: targetLang });
       return res.status(200).json({ items, source: "openai" });
     } catch (e) {
-      // ★ OpenAIエラー時は 502 と fallback の両方に切り分け可能
+      // ★ 修正: 502 を返さず 200 + fallback を返す（Android 側でHTTPエラーにならない）
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
-      return res.status(502).json({ items, source: "fallback_model_error" }); // ← ステータスで分かる
+      return res.status(200).json({ items, source: "fallback_model_error" }); // ★ 修正点
     }
   } catch (e) {
     console.error("[HANDLER ERROR]", e);
+    // ここも 400 ではなく 200 + fallback にするとより堅牢だが、
+    // 「他の箇所は変えず」の方針に合わせて現状維持。
     return res.status(400).json({ error: "Bad Request" });
   }
 }
