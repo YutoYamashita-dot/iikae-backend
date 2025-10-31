@@ -88,7 +88,7 @@ async function generateWithOpenAI({ topic, lang }) {
     if (l === "ja") {
       return `トピック: ${topic}\n
 要件:
-- 言語: 日本語（厳守）
+- 言語: 日本語か英語
 - 文体: 書き言葉・断定調（です/ますを避ける）
 - 「${topic}」の性質を比喩で表現し、タイトルと説明を作る
 - JSON配列のみを返す（余計な文字やマークダウンを含めない）`;
