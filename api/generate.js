@@ -189,7 +189,7 @@ const fallback = {
 // --- OpenAI で生成 ---
 // 言語別の system / user テンプレート（なければ英語にフォールバック）
 const SYS = {
-  ja: "入力された言葉について、意外性と納得感がある言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは8〜20字、説明は20〜80字で、最後に短い追い文を付けて含意を明確化する。句読点と表記は日本語規範に従う。JSONのみ返す。",
+  ja: "入力された言葉について、意外性と納得感と少しの風刺を含んだ言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは6〜16字、説明は20〜50字とする。JSONのみ返す。",
   en: "You are a concise copywriter. Output must be in the requested language, written style, declarative tone. Return exactly 3 items as JSON objects {title, desc}. Titles are crisp (3–8 words). Descriptions are 25–120 words and end with a short clarifying tail. Return JSON only."
 };
 const USER = {
@@ -197,7 +197,7 @@ const USER = {
 要件:
 - 言語: 入力された言語
 - 文体: 書き言葉・断定調（です/ますを避ける）
-- 「${topic}」の性質を比喩・比喩的ラベリングで表現し、タイトルと説明を作る
+- 「${topic}」の性質を意外性と納得感があるラベリングで表現し、タイトルと説明を作る
 - JSON配列のみを返す（余計な文字やマークダウンを含めない）`,
   en: (topic) => `Topic: ${topic}
 Requirements:
@@ -266,7 +266,7 @@ async function generateWithOpenAI({ topic, lang }) {
 
   // ★ 環境変数が空/不正ならデフォルトへ
   const envModel = (process.env.OPENAI_MODEL || "").trim();
-  const model = envModel || "gpt-4o-mini";
+  const model = envModel || "gpt-5";
 
   const messages = buildMessages(lang, topic);
 
@@ -274,8 +274,8 @@ async function generateWithOpenAI({ topic, lang }) {
     const res = await client.chat.completions.create({
       model,
       messages,
-      temperature: 0.5,
-      max_tokens: 700
+      temperature: 0.8,
+  
       // ※ response_format は外す（非対応モデルでも動く）
     });
 
