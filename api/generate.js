@@ -274,7 +274,7 @@ async function generateWithOpenAI({ topic, lang }) {
     const res = await client.chat.completions.create({
       model,
       messages,
-      temperature: 0.8,
+      
   
       // ※ response_format は外す（非対応モデルでも動く）
     });
