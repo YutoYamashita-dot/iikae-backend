@@ -195,7 +195,7 @@ const SYS = {
 const USER = {
   ja: (topic) => `トピック: ${topic}
 要件:
-- 言語: アプリで指定された言語（厳守）
+- 言語: 入力された言語
 - 文体: 書き言葉・断定調（です/ますを避ける）
 - 「${topic}」の性質を比喩・比喩的ラベリングで表現し、タイトルと説明を作る
 - JSON配列のみを返す（余計な文字やマークダウンを含めない）`,
@@ -235,11 +235,38 @@ Requirements:
   ];
 }
 
+// ★★★ 追加：モデルがJSON以外やMarkdownで返しても安全に拾う抽出器 ★★★
+function extractFirstJson(text = "") {
+  // 1) まず配列 [ ... ] を優先抽出
+  const arrMatch = text.match(/\[\s*{[\s\S]*}\s*\]/);
+  if (arrMatch) {
+    try { return { items: JSON.parse(arrMatch[0]) }; } catch {}
+  }
+  // 2) 次にオブジェクト { ... } を抽出
+  const objMatch = text.match(/\{\s*"(?:items|title|desc)":[\s\S]*\}/);
+  if (objMatch) {
+    try {
+      const obj = JSON.parse(objMatch[0]);
+      if (Array.isArray(obj)) return { items: obj };
+      if (Array.isArray(obj.items)) return { items: obj.items };
+    } catch {}
+  }
+  // 3) そのままJSONとして試す
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return { items: parsed };
+    if (Array.isArray(parsed?.items)) return { items: parsed.items };
+  } catch {}
+  throw new Error("Invalid JSON from model");
+}
+// ★★★ ここまで ★★★
+
 async function generateWithOpenAI({ topic, lang }) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // ★ 既定モデルを安全なものに変更（JSON対応）
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  // ★ 環境変数が空/不正ならデフォルトへ
+  const envModel = (process.env.OPENAI_MODEL || "").trim();
+  const model = envModel || "gpt-4o-mini";
 
   const messages = buildMessages(lang, topic);
 
@@ -247,24 +274,15 @@ async function generateWithOpenAI({ topic, lang }) {
     const res = await client.chat.completions.create({
       model,
       messages,
-      temperature: 0.8,
-      max_tokens: 700,
-      response_format: { type: "json_object" }
+      temperature: 0.5,
+      max_tokens: 700
+      // ※ response_format は外す（非対応モデルでも動く）
     });
 
     const text = res.choices?.[0]?.message?.content ?? "";
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      if (text.trim().startsWith("[")) {
-        parsed = { items: JSON.parse(text) };
-      } else {
-        throw new Error("Invalid JSON from model");
-      }
-    }
+    const parsed = extractFirstJson(text); // ★ 堅牢抽出
+    const items = parsed.items;
 
-    const items = Array.isArray(parsed) ? parsed : parsed.items;
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw new Error("Empty items");
     }
@@ -273,13 +291,11 @@ async function generateWithOpenAI({ topic, lang }) {
       desc: String(desc ?? "").trim()
     }));
   } catch (e) {
-    // ★ 失敗理由を Vercel ログに詳細出力（原因特定用）
     console.error("[OpenAI ERROR]", {
       status: e?.status,
       code: e?.code,
       message: e?.message
     });
-    // そのまま上位へ投げる（handlerでフォールバック処理）
     throw e;
   }
 }
@@ -310,16 +326,14 @@ export default async function handler(req, res) {
       const items = await generateWithOpenAI({ topic, lang: targetLang });
       return res.status(200).json({ items, source: "openai" });
     } catch (e) {
-      // ★ 修正: 502 を返さず 200 + fallback を返す（Android 側でHTTPエラーにならない）
+      // OpenAI 側失敗時は 200 + fallback（HTTPエラーでフロントを止めない）
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
-      return res.status(200).json({ items, source: "fallback_model_error" }); // ★ 修正点
+      return res.status(200).json({ items, source: "fallback_model_error" });
     }
   } catch (e) {
     console.error("[HANDLER ERROR]", e);
-    // ここも 400 ではなく 200 + fallback にするとより堅牢だが、
-    // 「他の箇所は変えず」の方針に合わせて現状維持。
     return res.status(400).json({ error: "Bad Request" });
   }
 }
