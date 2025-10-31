@@ -20,6 +20,16 @@ function decideLang(topic, lang) {
   return lang.toLowerCase();
 }
 
+// ★ 追加: Accept-Language ヘッダーからの簡易推定（auto 時のみの補助）
+function pickLangFromHeader(acceptLanguage = "") {
+  const v = String(acceptLanguage || "").toLowerCase();
+  if (!v) return null;
+  // "ja,ja-JP;q=0.9,en-US;q=0.8,en;q=0.7" のような文字列を想定
+  if (v.includes("ja")) return "ja";
+  if (v.includes("en")) return "en";
+  return null;
+}
+
 // --- フォールバック（テンプレ） ---
 const fallback = {
   en(topic = "it") {
@@ -68,7 +78,7 @@ async function generateWithOpenAI({ topic, lang }) {
 
   const sys = (l) => {
     if (l === "ja") {
-      return "あなたは簡潔なコピーライター。出力は必ず日本語、文語体・断定調。3件だけ出力。各件はJSONの {title, desc}。タイトルは8〜20字、説明は30〜80字で、最後に短い追い文を付けて含意を明確化する。句読点と表記は日本語規範に従う。";
+      return "入力された言葉について、意外性と納得感がある言い換えを出力して。3件だけ出力。各件はJSONの {title, desc}。タイトルは8〜20字、説明は20〜40字で、最後に短い追い文を付けて含意を明確化する。句読点と表記は日本語規範に従う。";
     }
     // default: English
     return "You are a concise copywriter. Output must be in English, written style, declarative tone. Return exactly 3 items as JSON objects {title, desc}. Titles are crisp (3–8 words). Descriptions are 25–90 words and end with a short clarifying tail that links back to the topic.";
@@ -96,8 +106,8 @@ Requirements:
     { role: "user", content: user(lang) }
   ];
 
-  // gpt-4o-mini など軽量モデル
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  // gpt-4o-mini など軽量モデル（環境変数優先）
+  const model = process.env.OPENAI_MODEL || "gpt-5";
 
   const res = await client.chat.completions.create({
     model,
@@ -140,7 +150,12 @@ export default async function handler(req, res) {
 
   try {
     const { topic = "", lang = "auto" } = (await readJson(req)) ?? {};
-    const targetLang = decideLang(topic, lang);
+
+    // ★ 追加: lang=auto のときだけ Accept-Language を補助判定に利用
+    const headerHint = lang === "auto" ? pickLangFromHeader(req.headers["accept-language"]) : null;
+    const langHint = headerHint || lang;
+
+    const targetLang = decideLang(topic, langHint);
 
     if (!process.env.OPENAI_API_KEY) {
       // フォールバック（言語厳守）
