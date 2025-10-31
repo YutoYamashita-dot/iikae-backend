@@ -1,0 +1,13 @@
+{
+  "name": "iikae-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "node api/generate.js"
+  },
+  "dependencies": {
+    "openai": "^4.67.0"
+  }
+}
