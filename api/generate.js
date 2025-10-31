@@ -28,27 +28,21 @@ function isJapanese(text) {
 function decideLang(topic, lang) {
   const n = normalizeLang(lang);
   if (n && n !== "auto") return n;
-  // auto の場合
-  // 1) 日本語文字なら ja
   if (isJapanese(topic)) return "ja";
-  // 2) それ以外は英語
   return "en";
 }
 
-// ★ 追加: Accept-Language ヘッダーからの簡易推定（auto 時のみの補助）
+// ★ Accept-Language ヘッダーからの簡易推定（auto 時のみの補助）
 function pickLangFromHeader(acceptLanguage = "") {
   const v = String(acceptLanguage || "").toLowerCase();
   if (!v) return null;
-  // 優先度順で探索
   for (const code of ["ja","en","zh","hi","es","fr","ar","bn","pt","ru","ur","id","de","sw","mr","te","tr","ta","vi","ko"]) {
     if (v.includes(code)) return code;
   }
-  // 一致なし
   return null;
 }
 
 // --- フォールバック（テンプレ） ---
-// すべてのサポート言語を用意（簡潔な定型文）
 const fallback = {
   en(topic = "it") {
     return [
@@ -243,38 +237,51 @@ Requirements:
 
 async function generateWithOpenAI({ topic, lang }) {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  // ★ 既定モデルを安全なものに変更（JSON対応）
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
   const messages = buildMessages(lang, topic);
 
-  const model = process.env.OPENAI_MODEL || "gpt-5";
-
-  const res = await client.chat.completions.create({
-    model,
-    messages,
-    temperature: 0.8,
-    max_tokens: 700,
-    response_format: { type: "json_object" } // JSON強制
-  });
-
-  const text = res.choices?.[0]?.message?.content ?? "";
-  let parsed;
   try {
-    parsed = JSON.parse(text);
-  } catch {
-    if (text.trim().startsWith("[")) {
-      parsed = { items: JSON.parse(text) };
-    } else {
-      throw new Error("Invalid JSON from model");
-    }
-  }
+    const res = await client.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.8,
+      max_tokens: 700,
+      response_format: { type: "json_object" }
+    });
 
-  const items = Array.isArray(parsed) ? parsed : parsed.items;
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new Error("Empty items");
+    const text = res.choices?.[0]?.message?.content ?? "";
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      if (text.trim().startsWith("[")) {
+        parsed = { items: JSON.parse(text) };
+      } else {
+        throw new Error("Invalid JSON from model");
+      }
+    }
+
+    const items = Array.isArray(parsed) ? parsed : parsed.items;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error("Empty items");
+    }
+    return items.slice(0, 3).map(({ title, desc }) => ({
+      title: String(title ?? "").trim(),
+      desc: String(desc ?? "").trim()
+    }));
+  } catch (e) {
+    // ★ 失敗理由を Vercel ログに詳細出力（原因特定用）
+    console.error("[OpenAI ERROR]", {
+      status: e?.status,
+      code: e?.code,
+      message: e?.message
+    });
+    // そのまま上位へ投げる（handlerでフォールバック処理）
+    throw e;
   }
-  return items.slice(0, 3).map(({ title, desc }) => ({
-    title: String(title ?? "").trim(),
-    desc: String(desc ?? "").trim()
-  }));
 }
 
 export default async function handler(req, res) {
@@ -290,8 +297,9 @@ export default async function handler(req, res) {
     const hintOrLang = headerHint || lang;
     const targetLang = decideLang(topic, hintOrLang);
 
+    // ★ APIキー未設定なら明示ログ（運用時の見落とし防止）
     if (!process.env.OPENAI_API_KEY) {
-      // フォールバック（対象言語が未定義なら英語へフォールバック）
+      console.warn("[WARN] OPENAI_API_KEY is not set. Falling back.");
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
@@ -302,13 +310,14 @@ export default async function handler(req, res) {
       const items = await generateWithOpenAI({ topic, lang: targetLang });
       return res.status(200).json({ items, source: "openai" });
     } catch (e) {
+      // ★ OpenAIエラー時は 502 と fallback の両方に切り分け可能
       const fb = fallback[targetLang] ?? fallback.en;
       const topicFallback = topic || (targetLang === "ja" ? "それ" : (targetLang === "zh" ? "它" : "it"));
       const items = fb(topicFallback);
-      return res.status(200).json({ items, source: "fallback_model_error" });
+      return res.status(502).json({ items, source: "fallback_model_error" }); // ← ステータスで分かる
     }
   } catch (e) {
-    console.error(e);
+    console.error("[HANDLER ERROR]", e);
     return res.status(400).json({ error: "Bad Request" });
   }
 }
